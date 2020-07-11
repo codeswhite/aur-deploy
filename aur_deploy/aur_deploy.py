@@ -1,4 +1,5 @@
 from shutil import rmtree
+from os import rename
 import subprocess
 from pathlib import Path
 from hashlib import sha256
@@ -11,45 +12,40 @@ from bs4 import BeautifulSoup
 
 
 def read_twine_token():
-    return Path(__file__).parent.joinpath('data', 'twine_token').read_text().strip()
+    return Path(__file__).parent.parent.joinpath(
+        'data', 'twine_token').read_text().strip()
 
 
-def read_pkgbuild_template(pkgname, pkgver, pkgdesc):
-    t = Path(__file__).parent.joinpath('data', 'pkgbuild_template').read_text()
-    for k, v in {'<py_pkgname>': pkgname,
-                 '<py_pkgver>': pkgver,
-                 '<py_pkgdesc>': pkgdesc,
-                 '<py_first_letter>': pkgname[0]}:
-        t = t.replace(k, v)
-    return t
-
-
-def load_pypi(name):
+def get_pypi_ver(name):
+    pr('Checking PyPI: ', end='')
     url = f'https://pypi.org/project/{name}/'
     res = get(url)
     if res.status_code != 200:
-        print()
-        pr('Bad response!', '!')
+        print('Not found!')
         return '0'
     bs = BeautifulSoup(res.text, features='html.parser')
     h1 = bs.find('h1', {"class": 'package-header__name'})
-    return h1.get_text(strip=True).split()[-1]  # Version
+    ver = h1.get_text(strip=True).split()[-1]  # Version
+    print(ver)
+    return ver
 
 
-def load_aur(name):
+def get_aur_ver(name):
+    pr('Checking AUR: ', end='')
     url = f'https://aur.archlinux.org/packages/python-{name}/'
     res = get(url)
     if res.status_code != 200:
-        print()
-        pr('Bad response!', '!')
+        print('Not found!')
         return '0'
     bs = BeautifulSoup(res.text, features='html.parser')
     d = bs.find('div', {"id": 'pkgdetails'})
     h2 = d.find('h2')
-    return h2.get_text(strip=True).split()[-1]  # Version
+    ver = h2.get_text(strip=True).split()[-1]  # Version
+    print(ver)
+    return ver
 
 
-def aur_deploy(directory):
+def aur_deploy(args, directory=Path.cwd()):
     if not directory.joinpath('setup.py').is_file():
         return pr('No setup.py found in current directory!', 'X')
 
@@ -60,23 +56,21 @@ def aur_deploy(directory):
     pr(f'Project {title} {new_ver} in: {directory}')
 
     # Check PyPI
-    pr('Checking PyPI: ', end='')
-    pypi_ver = load_pypi(title)
-    print(pypi_ver)
-    if version.parse(new_ver) > version.parse(pypi_ver):
+    if args.force or version.parse(new_ver) > version.parse(get_pypi_ver(title)):
         if not pause('publish to PyPI', cancel=True):
             return
 
         # Clean build and dist
         for f in directory.iterdir():
             if f.name in ('build', 'dist'):
-                pr('Removing: ', f)
+                pr(f'Removing: {f}')
                 rmtree(f)
 
         # Build wheel
         pr('Building wheel')
-        if 0 != subprocess.call(['python3', './setup.py', 'sdist', 'bdist_wheel'],
-                                cwd=directory, stdout=subprocess.DEVNULL):
+        if 0 != subprocess.call(
+            ['python3', './setup.py', 'sdist', 'bdist_wheel'],
+                cwd=directory, stdout=subprocess.DEVNULL):
             return pr('Bad exit code from setup bulid wheel!', 'X')
 
         # Check via twine
@@ -88,16 +82,14 @@ def aur_deploy(directory):
 
         # Publish via twine
         pr('Publishing via twine')
-        if 0 != subprocess.call(['python3', '-m', 'twine', 'upload', './dist/*'],
-                                env={'TWINE_USERNAME': '__token__',
-                                     'TWINE_PASSWORD': read_twine_token()},
-                                cwd=directory):
+        if 0 != subprocess.call(
+            ['python3', '-m', 'twine', 'upload', './dist/*'],
+            env={'TWINE_USERNAME': '__token__',
+                 'TWINE_PASSWORD': read_twine_token()},
+                cwd=directory):
             return pr('Bad exit code from twine upload!', 'X')
 
-    pr('Checking AUR: ', end='')
-    aur_ver = load_aur(title)
-    print(aur_ver)
-    if version.parse(new_ver) > version.parse(aur_ver):
+    if args.force or version.parse(new_ver) > version.parse(get_aur_ver(title)):
         if not pause('publish to AUR', cancel=True):
             return
 
@@ -119,10 +111,24 @@ def aur_deploy(directory):
             init = True
 
         pkgbuild = aur_subdir.joinpath('PKGBUILD')
+        aur_remote_url = f'ssh://aur@aur.archlinux.org/python-{title}.git'
         if init:
+            pr('Creating submodule named aur which will host AUR repo')
             aur_subdir.mkdir()
-            pkgbuild.write_text(read_pkgbuild_template(
-                title, new_ver, description))
+            subprocess.call(['git', 'init'], cwd=aur_subdir)
+            subprocess.call(
+                ['git', 'remote', 'add', 'aur', aur_remote_url],
+                cwd=aur_subdir)
+
+            pr('Using pip2pkgbuild to create a new PKGBUILD in ./aur dir')
+            pkgbuild.write_bytes(subprocess.check_output(
+                ['pip2pkgbuild', '-o', title]))
+            # TODO Insert Maintainer tag
+            pr('Created, go edit it as you see fit and then continue')
+            if not pause(cancel=True):
+                return
+            # TODO Check with namcap
+
         else:
             # update_pkgbuild
             pr('Updating PKGBUILD with:')
@@ -133,6 +139,8 @@ def aur_deploy(directory):
                     if line.startswith('pkgver='):
                         old_ver = line.strip().split('=')[1]
                         print(line.replace(old_ver, new_ver), end='')
+                    elif line.startswith('pkgrel='):
+                        print(line.replace(line.strip().split('=')[1], '1'))
                     elif line.startswith('source=('):
                         s = line.split('(')[0] + '("'
                         print(s + hosted_targz + '")')
@@ -159,5 +167,9 @@ def aur_deploy(directory):
                         cwd=aur_subdir)
         pr('Pushing to AUR!')
         subprocess.call(['git', 'push', '--set-upstream',
-                         'origin', 'master'], cwd=aur_subdir)
-
+                         'aur', 'master'], cwd=aur_subdir)
+        if init:
+            pr('Registering a submodule "aur"')
+            subprocess.call(
+                ['git', 'submodule', 'add', aur_remote_url, 'aur'],
+                cwd=directory)

@@ -6,7 +6,7 @@ long_description = (here / 'README.md').read_text(encoding='utf-8')
 
 setuptools.setup(
     name="aur-deploy",
-    version="0.7.1",
+    version="0.7.4",
     description="Automate updating pkgbuild and deploying to AUR",
     url="https://github.com/codeswhite/aur-deploy",
     classifiers=[
@@ -17,7 +17,7 @@ setuptools.setup(
         'Topic :: Software Development :: Build Tools'
     ],
     keywords='aur, archlinux, build, deploy, publish',
-    python_requires='>=3.5',
+    python_requires='>=3.6',
     install_requires=[
         'interutils',
         'requests',

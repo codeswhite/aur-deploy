@@ -1,3 +1,3 @@
 [submodule "aur"]
 	path = aur
-	url = aur@aur.archlinux.org/python-aur-deploy.git
+	url = ssh://aur@aur.archlinux.org/python-aur-deploy.git
