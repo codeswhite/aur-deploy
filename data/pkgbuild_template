@@ -1,0 +1,19 @@
+# Maintainer: Max G <max3227@gmail.com>
+
+pkgname=python-<py_pkgname>
+_pypiname=${pkgname/python-/}
+pkgver=<py_pkgver>
+pkgrel=1
+pkgdesc="<py_pkgdesc>"
+arch=('any')
+url='https://pypi.org/project/<py_pkgname>/'
+license=('MIT')
+depends=('python-setuptools')
+
+source=("https://files.pythonhosted.org/packages/source/<py_first_letter>/<py_pkgname>/<py_pkgname>-${pkgver}.tar.gz")
+sha256sums=()
+
+package() {
+    cd $srcdir/${_pypiname}-${pkgver}
+    python setup.py install --root="${pkgdir}/" --optimize=1
+}
