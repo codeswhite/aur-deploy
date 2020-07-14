@@ -45,9 +45,16 @@ def get_aur_ver(name):
     return ver
 
 
-def aur_deploy(args, directory=Path.cwd()):
+def aur_deploy(args):
+    directory = args.directory
+    if directory.is_file():
+        directory = directory.parent
+    elif not directory.is_dir():
+        return pr(f'No such file or directory {directory} !', 'X')
+    pr(f'Running in: {directory} directory')
     if not directory.joinpath('setup.py').is_file():
-        return pr('No setup.py found in current directory!', 'X')
+        return pr('No setup.py found in directory, ' +
+                  'Please prepare setup.py for deployment!', 'X')
 
     # Load setup.py
     title, new_ver, description = subprocess.check_output(
