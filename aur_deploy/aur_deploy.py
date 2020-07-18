@@ -11,11 +11,6 @@ from requests import get
 from bs4 import BeautifulSoup
 
 
-def read_twine_token():
-    return Path(__file__).parent.parent.joinpath(
-        'data', 'twine_token').read_text().strip()
-
-
 def get_pypi_ver(name):
     pr('Checking PyPI: ', end='')
     url = f'https://pypi.org/project/{name}/'
@@ -46,6 +41,10 @@ def get_aur_ver(name):
 
 
 def pypi_procedure(directory: Path):
+    # Check pypirc
+    if not (Path.home() / '.pypirc').is_file():
+        return pr('No ~/.pypirc found! please initiate a configuration!', 'X')
+
     # Clean build and dist
     for f in directory.iterdir():
         if f.name in ('build', 'dist'):
@@ -62,18 +61,16 @@ def pypi_procedure(directory: Path):
     # Check via twine
     pr('Checking via twine')
     if 0 != subprocess.call(
-        ['python3', '-m', 'twine', 'check', './dist/*'],
-            cwd=directory):
+            ['python3', '-m', 'twine', 'check', './dist/*'], cwd=directory):
         return pr('Bad exit code from twine check!', 'X')
 
     # Publish via twine
     pr('Publishing via twine')
     if 0 != subprocess.call(
-        ['python3', '-m', 'twine', 'upload', './dist/*'],
-        env={'TWINE_USERNAME': '__token__',
-             'TWINE_PASSWORD': read_twine_token()},
-            cwd=directory):
+            ['python3', '-m', 'twine', 'upload', './dist/*'], cwd=directory):
         return pr('Bad exit code from twine upload!', 'X')
+
+    return 1  # Success
 
 
 def update_pkgbuild_version(pkgbuild: Path, directory: Path, title: str, new_ver: str):
@@ -87,10 +84,7 @@ def update_pkgbuild_version(pkgbuild: Path, directory: Path, title: str, new_ver
         f'{title[0]}/{title}/{title}' + '-${pkgver}.tar.gz'
 
     # update_pkgbuild
-    pr('Updating PKGBUILD version with:')
-    pr('\tpkgver = ' + new_ver)
-    pr('\tpkgrel = 1')
-    pr('\tsha256sum = ' + targz_checksum)
+    pr(f'Updating PKGBUILD version to {new_ver}')
     with FileInput(pkgbuild, inplace=True) as file:
         for line in file:
             if line.startswith('pkgver='):
@@ -103,6 +97,7 @@ def update_pkgbuild_version(pkgbuild: Path, directory: Path, title: str, new_ver
                 print(s + targz_checksum + '")')
             else:
                 print(line, end='')
+    return 1  # Success
 
 
 def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str, new_ver: str):
@@ -118,7 +113,8 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
     aur_remote_url = f'ssh://aur@aur.archlinux.org/python-{title}.git'
     if not create:
         # Only update pkgbuild version info
-        update_pkgbuild_version(pkgbuild, directory, title, new_ver)
+        if not update_pkgbuild_version(pkgbuild, directory, title, new_ver):
+            return
     else:
         if not new_package:
             # clone
@@ -127,19 +123,18 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
                 ['git', 'clone', aur_remote_url, 'aur'], cwd=directory)
 
             # Update pkgbuild version info
-            update_pkgbuild_version(pkgbuild, directory, title, new_ver)
+            if not update_pkgbuild_version(pkgbuild, directory, title, new_ver):
+                return
         else:
             pr('Creating submodule named aur which will host AUR repo')
             aur_subdir.mkdir()
             subprocess.call(['git', 'init'], cwd=aur_subdir)
             subprocess.call(
-                ['git', 'remote', 'add', 'aur', aur_remote_url],
-                cwd=aur_subdir)
+                ['git', 'remote', 'add', 'aur', aur_remote_url], cwd=aur_subdir)
 
             # Get deps:
             requires = {'python-' + i for i in subprocess.check_output(
-                ['python3', 'setup.py', '--requires'],
-                cwd=directory).decode().splitlines()}
+                ['python3', 'setup.py', '--requires'], cwd=directory).decode().splitlines()}
             lreq = len(requires)
             pr(f'Added {lreq} dependencies from setup.py')
             if aur_deps:
@@ -160,31 +155,27 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
     # makepkg_srcinfo
     pr('Dumping SRCINFO')
     with aur_subdir.joinpath('.SRCINFO').open('w') as srcinfo:
-        if 0 != subprocess.call(['makepkg', '--printsrcinfo'],
-                                cwd=aur_subdir, stdout=srcinfo):
+        if 0 != subprocess.call(['makepkg', '--printsrcinfo'], cwd=aur_subdir, stdout=srcinfo):
             return pr('Bad exit code from makepkg!', 'X')
 
     # Commit and push changes to AUR
     pr('Staging updated files')
-    subprocess.call(['git', 'add', 'PKGBUILD', '.SRCINFO'],
-                    cwd=aur_subdir)
+    subprocess.call(['git', 'add', 'PKGBUILD', '.SRCINFO'], cwd=aur_subdir)
     commit_msg = f'"Updated to v{new_ver}"'
     pr(f'Committing: {commit_msg}')
-    subprocess.call(['git', 'commit', '-m', commit_msg],
-                    cwd=aur_subdir)
-    remote_name = subprocess.check_output(['git', 'remote', 'show']).decode().strip()
+    subprocess.call(['git', 'commit', '-m', commit_msg], cwd=aur_subdir)
+    remote_name = subprocess.check_output(
+        ['git', 'remote', 'show']).decode().strip()
     pr('Pushing to AUR!')
     subprocess.call(['git', 'push', '--set-upstream',
                      remote_name, 'master'], cwd=aur_subdir)
-    if not create:
-        return
-    if 128 == subprocess.call(['git', 'status'], stdout=subprocess.DEVNULL, cwd=directory):
-        pr('No git repo initialized so cannot register the "aur" submodule', '!')
-        return
-    pr('Registering a submodule "aur"')
-    subprocess.call(
-        ['git', 'submodule', 'add', aur_remote_url, 'aur'],
-        cwd=directory)
+    if create:
+        if 128 == subprocess.call(['git', 'status'], stdout=subprocess.DEVNULL, cwd=directory):
+            return pr('No git repo initialized so cannot register the "aur" submodule', '!')
+        pr('Registering a submodule "aur"')
+        subprocess.call(['git', 'submodule', 'add',
+                         aur_remote_url, 'aur'], cwd=directory)
+    return 1 # Success
 
 
 def aur_deploy(args):
@@ -192,11 +183,13 @@ def aur_deploy(args):
     if directory.is_file():
         directory = directory.parent
     elif not directory.is_dir():
-        return pr(f'No such file or directory {directory} !', 'X')
+        pr(f'No such file or directory {directory} !', 'X')
+        return 1
     pr(f'Running in: {directory} directory')
     if not directory.joinpath('setup.py').is_file():
-        return pr('No setup.py found in directory, ' +
-                  'Please prepare setup.py for deployment!', 'X')
+        pr('No setup.py found in directory, ' +
+           'Please prepare setup.py for deployment!', 'X')
+        return 1
 
     # Load setup.py
     title, new_ver, description = subprocess.check_output(
@@ -206,16 +199,16 @@ def aur_deploy(args):
 
     # Check PyPI
     if args.force or version.parse(new_ver) > version.parse(get_pypi_ver(title)):
-        if not pause('publish to PyPI', cancel=True):
-            return
-        pypi_procedure(directory)
-    
+        if not pause('publish to PyPI', cancel=True) \
+                or not pypi_procedure(directory):
+            return 1
+
     # Check AUR
     if args.no_aur:
         return
     aur_ver = get_aur_ver(title)
     if args.force or version.parse(new_ver) > version.parse(aur_ver):
-        if not pause('publish to AUR', cancel=True):
-            return
-        aur_procedure(aur_ver == '0', args.aur_depends,
-                      directory, title, new_ver)
+        if not pause('publish to AUR', cancel=True) \
+            or not aur_procedure(aur_ver == '0', args.aur_depends,
+                                 directory, title, new_ver):
+            return 1

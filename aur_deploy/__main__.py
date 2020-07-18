@@ -1,6 +1,7 @@
 from aur_deploy.aur_deploy import aur_deploy
 from pathlib import Path
 
+
 def parse_args():
     from argparse import ArgumentParser
 
@@ -17,7 +18,7 @@ def parse_args():
 
 
 def main():
-    aur_deploy(parse_args())
+    exit(aur_deploy(parse_args()))
 
 
 if __name__ == "__main__":
