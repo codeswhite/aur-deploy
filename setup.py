@@ -18,7 +18,7 @@ setuptools.setup(
     ],
     keywords='aur, archlinux, build, deploy, publish',
     python_requires='>=3.6',
-    install_requires=[
+    requires=[
         'interutils',
         'requests',
         'bs4'
