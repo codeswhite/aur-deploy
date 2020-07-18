@@ -90,7 +90,6 @@ def update_pkgbuild_version(pkgbuild: Path, directory: Path, title: str, new_ver
     pr('Updating PKGBUILD version with:')
     pr('\tpkgver = ' + new_ver)
     pr('\tpkgrel = 1')
-    pr('\tsource = ' + hosted_targz)
     pr('\tsha256sum = ' + targz_checksum)
     with FileInput(pkgbuild, inplace=True) as file:
         for line in file:
@@ -98,10 +97,7 @@ def update_pkgbuild_version(pkgbuild: Path, directory: Path, title: str, new_ver
                 old_ver = line.strip().split('=')[1]
                 print(line.replace(old_ver, new_ver), end='')
             elif line.startswith('pkgrel='):
-                print(line.replace(line.strip().split('=')[1], '1'))
-            elif line.startswith('source=('):
-                s = line.split('(')[0] + '("'
-                print(s + hosted_targz + '")')
+                print(line.replace(line.strip().split('=')[1], '1'), end='')
             elif line.startswith('sha256sums=('):
                 s = line.split('(')[0] + '("'
                 print(s + targz_checksum + '")')
