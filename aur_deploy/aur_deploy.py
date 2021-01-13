@@ -40,17 +40,7 @@ def get_aur_ver(name):
     return ver
 
 
-def pypi_procedure(directory: Path):
-    # Check pypirc
-    if not (Path.home() / '.pypirc').is_file():
-        return pr('No ~/.pypirc found! please configure twine!', 'X')
-
-    # Clean build and dist
-    for f in directory.iterdir():
-        if f.name in ('build', 'dist'):
-            pr(f'Removing: {f}')
-            rmtree(f)
-
+def build_wheel(directory: Path):
     # Build wheel
     pr('Building wheel')
     if 0 != call(
@@ -64,21 +54,42 @@ def pypi_procedure(directory: Path):
             ['python3', '-m', 'twine', 'check', './dist/*'], cwd=directory):
         return pr('Bad exit code from twine check!', 'X')
 
+    return True  # Success
+
+
+def pypi_procedure(directory: Path):
+    # Check pypirc
+    if not (Path.home() / '.pypirc').is_file():
+        return pr('No ~/.pypirc found! please configure twine!', 'X')
+
+    if not build_wheel(directory):
+        return 0
+
+    # Clean build and dist
+    for f in directory.iterdir():
+        if f.name in ('build', 'dist'):
+            pr(f'Removing: {f}')
+            rmtree(f)
+
     # Publish via twine
     pr('Publishing via twine')
     if 0 != call(
             ['python3', '-m', 'twine', 'upload', './dist/*'], cwd=directory):
         return pr('Bad exit code from twine upload!', 'X')
 
-    return 1  # Success
+    return True  # Success
 
 
 def update_pkgbuild_version(pkgbuild: Path, directory: Path, title: str, new_ver: str):
     # Calculate source targz checksums
     pr('Calculating SHA256 sum of distributed tarball')
-    targz_checksum = sha256(directory.joinpath(
-        'dist', f'{title}-{new_ver}.tar.gz'
-    ).read_bytes()).hexdigest()
+    tarball = directory.joinpath('dist', f'{title}-{new_ver}.tar.gz')
+    if not tarball.is_file():
+        pr('Tarball not found, building..')
+        if not build_wheel(directory):
+            return
+
+    targz_checksum = sha256(tarball.read_bytes()).hexdigest()
 
     # update_pkgbuild
     pr(f'Updating PKGBUILD version to {new_ver}')
