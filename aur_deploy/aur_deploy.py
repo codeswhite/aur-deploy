@@ -170,7 +170,7 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
 
     # Commit and push changes to AUR
     branch_name = check_output(
-        ['git', 'branch', '--show-current']).decode().strip()
+        ['git', 'branch', '--show-current'], cwd=aur_subdir).decode().strip()
     pr(f'Operating on branch: {branch_name}')
 
     pr('Staging updated files')
