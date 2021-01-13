@@ -1,6 +1,6 @@
 from shutil import rmtree
 from os import rename
-import subprocess
+from subprocess import call, check_output, DEVNULL
 from pathlib import Path
 from hashlib import sha256
 from packaging import version
@@ -43,7 +43,7 @@ def get_aur_ver(name):
 def pypi_procedure(directory: Path):
     # Check pypirc
     if not (Path.home() / '.pypirc').is_file():
-        return pr('No ~/.pypirc found! please initiate a configuration!', 'X')
+        return pr('No ~/.pypirc found! please configure twine!', 'X')
 
     # Clean build and dist
     for f in directory.iterdir():
@@ -53,20 +53,20 @@ def pypi_procedure(directory: Path):
 
     # Build wheel
     pr('Building wheel')
-    if 0 != subprocess.call(
+    if 0 != call(
         ['python3', './setup.py', 'sdist', 'bdist_wheel'],
-            cwd=directory, stdout=subprocess.DEVNULL):
+            cwd=directory, stdout=DEVNULL):
         return pr('Bad exit code from setup bulid wheel!', 'X')
 
     # Check via twine
     pr('Checking via twine')
-    if 0 != subprocess.call(
+    if 0 != call(
             ['python3', '-m', 'twine', 'check', './dist/*'], cwd=directory):
         return pr('Bad exit code from twine check!', 'X')
 
     # Publish via twine
     pr('Publishing via twine')
-    if 0 != subprocess.call(
+    if 0 != call(
             ['python3', '-m', 'twine', 'upload', './dist/*'], cwd=directory):
         return pr('Bad exit code from twine upload!', 'X')
 
@@ -75,6 +75,7 @@ def pypi_procedure(directory: Path):
 
 def update_pkgbuild_version(pkgbuild: Path, directory: Path, title: str, new_ver: str):
     # Calculate source targz checksums
+    pr('Calculating SHA256 sum of distributed tarball')
     targz_checksum = sha256(directory.joinpath(
         'dist', f'{title}-{new_ver}.tar.gz'
     ).read_bytes()).hexdigest()
@@ -93,7 +94,7 @@ def update_pkgbuild_version(pkgbuild: Path, directory: Path, title: str, new_ver
                 print(s + targz_checksum + '")')
             else:
                 print(line, end='')
-    return 1  # Success
+    return True  # Success
 
 
 def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str, new_ver: str):
@@ -115,7 +116,7 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
         if not new_package:
             # clone
             pr('Cloning existing AUR repo')
-            subprocess.call(
+            call(
                 ['git', 'clone', aur_remote_url, 'aur'], cwd=directory)
 
             # Update pkgbuild version info
@@ -124,12 +125,12 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
         else:
             pr('Creating submodule named aur which will host AUR repo')
             aur_subdir.mkdir()
-            subprocess.call(['git', 'init'], cwd=aur_subdir)
-            subprocess.call(
+            call(['git', 'init'], cwd=aur_subdir)
+            call(
                 ['git', 'remote', 'add', 'aur', aur_remote_url], cwd=aur_subdir)
 
             # Get deps:
-            requires = {'python-' + i for i in subprocess.check_output(
+            requires = {'python-' + i for i in check_output(
                 ['python3', 'setup.py', '--requires'], cwd=directory).decode().splitlines()}
             lreq = len(requires)
             pr(f'Added {lreq} dependencies from setup.py')
@@ -141,7 +142,7 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
             for i in requires:
                 print('\t', i)
             pr('Using pip2pkgbuild to create a new PKGBUILD in ./aur directory')
-            pkgbuild.write_bytes(subprocess.check_output(
+            pkgbuild.write_bytes(check_output(
                 ['pip2pkgbuild', '-d'] + list(requires) + ['-o', title]))
             # TODO Insert Maintainer tag
 
@@ -153,27 +154,32 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
     # makepkg_srcinfo
     pr('Dumping SRCINFO')
     with aur_subdir.joinpath('.SRCINFO').open('w') as srcinfo:
-        if 0 != subprocess.call(['makepkg', '--printsrcinfo'], cwd=aur_subdir, stdout=srcinfo):
+        if 0 != call(['makepkg', '--printsrcinfo'], cwd=aur_subdir, stdout=srcinfo):
             return pr('Bad exit code from makepkg!', 'X')
 
     # Commit and push changes to AUR
+    branch_name = check_output(
+        ['git', 'branch', '--show-current']).decode().strip()
+    pr(f'Operating on branch: {branch_name}')
+
     pr('Staging updated files')
-    subprocess.call(['git', 'add', 'PKGBUILD', '.SRCINFO'], cwd=aur_subdir)
+    call(['git', 'add', 'PKGBUILD', '.SRCINFO'], cwd=aur_subdir)
     commit_msg = f'"Updated to v{new_ver}"'
+
     pr(f'Committing: {commit_msg}')
-    subprocess.call(['git', 'commit', '-m', commit_msg], cwd=aur_subdir)
-    remote_name = subprocess.check_output(
-        ['git', 'remote', 'show']).decode().strip()
+    call(['git', 'commit', '-m', commit_msg], cwd=aur_subdir)
+    remote_name = check_output(['git', 'remote', 'show']).decode().strip()
+
     pr('Pushing to AUR!')
-    subprocess.call(['git', 'push', '--set-upstream',
-                     remote_name, 'master'], cwd=aur_subdir)
+    call(['git', 'push', '--set-upstream',
+          remote_name, branch_name], cwd=aur_subdir)
     if create:
-        if 128 == subprocess.call(['git', 'status'], stdout=subprocess.DEVNULL, cwd=directory):
+        if 128 == call(['git', 'status'], stdout=DEVNULL, cwd=directory):
             return pr('No git repo initialized so cannot register the "aur" submodule', '!')
         pr('Registering a submodule "aur"')
-        subprocess.call(['git', 'submodule', 'add',
-                         aur_remote_url, 'aur'], cwd=directory)
-    return 1 # Success
+        call(['git', 'submodule', 'add',
+              aur_remote_url, 'aur'], cwd=directory)
+    return 1  # Success
 
 
 def aur_deploy(args):
@@ -194,9 +200,8 @@ def aur_deploy(args):
         return 1
 
     # Load setup.py
-    title, new_ver, description = subprocess.check_output(
-        ['python3', 'setup.py', '--name', '--version', '--description'],
-        cwd=directory).decode().splitlines()
+    title, new_ver, description = check_output(['python3', 'setup.py', '--name', '--version', '--description'],
+                                               cwd=directory).decode().splitlines()
     pr(f'Project {title} {new_ver} in: {directory}')
 
     # Check PyPI
