@@ -11,13 +11,14 @@
 
 - From AUR install system package: `python-aur-deploy`
 
-- From PyPI:
+- From PyPI: 
+   
+    `$ pip install aur-deploy`
 
-    $ pip install aur-deploy
 
 ## Usage
 
 Run like:
 
-    $ aur-deploy --help
+`$ aur-deploy --help`
 
