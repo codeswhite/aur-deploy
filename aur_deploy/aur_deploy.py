@@ -138,11 +138,13 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
             lreq = len(requires)
             pr(f'Added {lreq} dependencies from setup.py')
             if aur_deps:
+                if 'python' in aur_deps:
+                    aur_deps.remove('python')
                 requires.update(aur_deps)
-                pr(f'Added {len(requires) - lreq} dependencies from arguments')
+                pr(f'Added {len(requires) - lreq} dependencies from cli arguments')
             for i in requires:
                 print('\t', i)
-            pr('Using pip2pkgbuild to create a new PKGBUILD in ./aur dir')
+            pr('Using pip2pkgbuild to create a new PKGBUILD in ./aur directory')
             pkgbuild.write_bytes(subprocess.check_output(
                 ['pip2pkgbuild', '-d'] + list(requires) + ['-o', title]))
             # TODO Insert Maintainer tag
@@ -179,12 +181,16 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
 
 
 def aur_deploy(args):
-    directory = args.directory
-    if directory.is_file():
-        directory = directory.parent
-    elif not directory.is_dir():
-        pr(f'No such file or directory {directory} !', 'X')
+    if args.directory:
+        directory = Path(args.directory)
+        if directory.is_file():
+            directory = directory.parent
+    else:
+        directory = Path.cwd()
+    if not directory.is_dir():
+        pr(f'Cnnot run in directory, No such directory {directory} !', 'X')
         return 1
+
     pr(f'Running in: {directory} directory')
     if not directory.joinpath('setup.py').is_file():
         pr('No setup.py found in directory, ' +
