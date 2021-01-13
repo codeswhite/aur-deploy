@@ -62,14 +62,14 @@ def pypi_procedure(directory: Path):
     if not (Path.home() / '.pypirc').is_file():
         return pr('No ~/.pypirc found! please configure twine!', 'X')
 
-    if not build_wheel(directory):
-        return 0
-
     # Clean build and dist
     for f in directory.iterdir():
         if f.name in ('build', 'dist'):
             pr(f'Removing: {f}')
             rmtree(f)
+
+    if not build_wheel(directory):
+        return 0
 
     # Publish via twine
     pr('Publishing via twine')
