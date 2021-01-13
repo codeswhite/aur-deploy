@@ -6,7 +6,7 @@ long_description = (here / 'README.md').read_text(encoding='utf-8')
 
 setuptools.setup(
     name="aur-deploy",
-    version="0.8.2",
+    version="0.8.4",
     description="Automate updating pkgbuild and deploying to AUR",
     url="https://github.com/codeswhite/aur-deploy",
     classifiers=[

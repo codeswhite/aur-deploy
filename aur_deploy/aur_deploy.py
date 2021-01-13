@@ -79,10 +79,6 @@ def update_pkgbuild_version(pkgbuild: Path, directory: Path, title: str, new_ver
         'dist', f'{title}-{new_ver}.tar.gz'
     ).read_bytes()).hexdigest()
 
-    # Locate hosted source targz
-    hosted_targz = 'https://files.pythonhosted.org/packages/source/' + \
-        f'{title[0]}/{title}/{title}' + '-${pkgver}.tar.gz'
-
     # update_pkgbuild
     pr(f'Updating PKGBUILD version to {new_ver}')
     with FileInput(pkgbuild, inplace=True) as file:
