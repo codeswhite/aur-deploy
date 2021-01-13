@@ -62,14 +62,14 @@ def pypi_procedure(directory: Path):
     if not (Path.home() / '.pypirc').is_file():
         return pr('No ~/.pypirc found! please configure twine!', 'X')
 
-    if not build_wheel(directory):
-        return 0
-
     # Clean build and dist
     for f in directory.iterdir():
         if f.name in ('build', 'dist'):
             pr(f'Removing: {f}')
             rmtree(f)
+
+    if not build_wheel(directory):
+        return 0
 
     # Publish via twine
     pr('Publishing via twine')
@@ -179,9 +179,9 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
 
     pr(f'Committing: {commit_msg}')
     call(['git', 'commit', '-m', commit_msg], cwd=aur_subdir)
-    remote_name = check_output(['git', 'remote', 'show']).decode().strip()
 
     pr('Pushing to AUR!')
+    remote_name = check_output(['git', 'remote', 'show']).decode().strip()
     call(['git', 'push', '--set-upstream',
           remote_name, branch_name], cwd=aur_subdir)
     if create:
