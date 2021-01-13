@@ -9,12 +9,15 @@
 
 ## Installation
 
-- Via AUR helper install package: `python-aur-deploy`
+- From AUR install system package: `python-aur-deploy`
 
-- Via PyPI:
+- From PyPI:
 
-    $ sudo pip install aur-deploy
+    $ pip install aur-deploy
 
 ## Usage
 
-Run in a directory with 
+Run like:
+
+    $ aur-deploy --help
+
