@@ -181,7 +181,8 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
     call(['git', 'commit', '-m', commit_msg], cwd=aur_subdir)
 
     pr('Pushing to AUR!')
-    remote_name = check_output(['git', 'remote', 'show']).decode().strip()
+    remote_name = check_output(
+        ['git', 'remote', 'show'], cwd=aur_subdir).decode().strip()
     call(['git', 'push', '--set-upstream',
           remote_name, branch_name], cwd=aur_subdir)
     if create:
