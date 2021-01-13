@@ -172,10 +172,10 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
     branch_name = check_output(
         ['git', 'branch', '--show-current'], cwd=aur_subdir).decode().strip()
     if branch_name != 'master': # Currently AUR declines other names
+        pr(f'Renaming branch: {branch_name} to "master" (per AUR policy)')
         call(['git', 'branch', '-m', 'master'], cwd=aur_subdir)
         branch_name = check_output(
             ['git', 'branch', '--show-current'], cwd=aur_subdir).decode().strip()
-    pr(f'Operating on branch: {branch_name}')
 
     pr('Staging updated files')
     call(['git', 'add', 'PKGBUILD', '.SRCINFO'], cwd=aur_subdir)
