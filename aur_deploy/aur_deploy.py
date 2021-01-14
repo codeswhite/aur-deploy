@@ -142,7 +142,7 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
 
             # Get deps:
             requires = {'python-' + i for i in check_output(
-                ['python3', 'setup.py', '--requires'], cwd=directory).decode().splitlines()}
+                ['python3', 'setup.py', '--requires'], cwd=directory).decode().splitlines() if i}
             lreq = len(requires)
             pr(f'Added {lreq} dependencies from setup.py')
             if aur_deps:
