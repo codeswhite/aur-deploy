@@ -60,7 +60,7 @@ def build_wheel(directory: Path):
 def pypi_procedure(directory: Path):
     # Check pypirc
     if not (Path.home() / '.pypirc').is_file():
-        return pr('No ~/.pypirc found! please configure twine!', 'X')
+        return pr('No ~/.pypirc found! Please configure twine!', 'X')
 
     # Clean build and dist
     for f in directory.iterdir():
@@ -171,7 +171,7 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
     # Commit and push changes to AUR
     branch_name = check_output(
         ['git', 'branch', '--show-current'], cwd=aur_subdir).decode().strip()
-    if branch_name != 'master': # Currently AUR declines other names
+    if branch_name != 'master':  # Currently AUR declines other names
         pr(f'Renaming branch: {branch_name} to "master" (per AUR policy)')
         call(['git', 'branch', '-m', 'master'], cwd=aur_subdir)
         branch_name = check_output(
@@ -199,6 +199,7 @@ def aur_procedure(new_package: bool, aur_deps: iter, directory: Path, title: str
 
 
 def aur_deploy(args):
+    # Initialize working directory
     if args.directory:
         directory = Path(args.directory)
         if directory.is_file():
@@ -208,8 +209,8 @@ def aur_deploy(args):
     if not directory.is_dir():
         pr(f'Cnnot run in directory, No such directory {directory} !', 'X')
         return 1
-
     pr(f'Running in: {directory} directory')
+
     if not directory.joinpath('setup.py').is_file():
         pr('No setup.py found in directory, ' +
            'Please prepare setup.py for deployment!', 'X')
@@ -218,10 +219,11 @@ def aur_deploy(args):
     # Load setup.py
     title, new_ver, description = check_output(['python3', 'setup.py', '--name', '--version', '--description'],
                                                cwd=directory).decode().splitlines()
-    pr(f'Project {title} {new_ver} in: {directory}')
+    pr(f'Parsed setup file for project: {title} v{new_ver}')
+    latest_v = version.parse(new_ver)
 
     # Check PyPI
-    if args.force or version.parse(new_ver) > version.parse(get_pypi_ver(title)):
+    if args.force or latest_v > version.parse(get_pypi_ver(title)):
         if not pause('publish to PyPI', cancel=True) \
                 or not pypi_procedure(directory):
             return 1
@@ -230,7 +232,7 @@ def aur_deploy(args):
     if args.no_aur:
         return
     aur_ver = get_aur_ver(title)
-    if args.force or version.parse(new_ver) > version.parse(aur_ver):
+    if args.force or latest_v > version.parse(aur_ver):
         if not pause('publish to AUR', cancel=True) \
             or not aur_procedure(aur_ver == '0', args.aur_depends,
                                  directory, title, new_ver):
